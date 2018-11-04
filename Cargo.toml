@@ -1,0 +1,10 @@
+[package]
+name = "hack-assembler"
+version = "0.1.0"
+authors = ["Artem Tyurin <artem.tyurin@uber.com>"]
+
+[dependencies]
+
+[[bin]]
+name = "hack-assembler"
+path = "main.rs"
