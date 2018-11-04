@@ -20,6 +20,7 @@ enum Instruction {
   L { value: String },
 }
 
+// @TODO: handle 'a' bit
 fn comp_to_binary(s: &str) -> u16 {
   match s {
     "0" => 0b101010,
