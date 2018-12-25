@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 
 #[derive(Debug)]
@@ -20,7 +21,6 @@ enum Instruction {
   L { value: String },
 }
 
-// @TODO: handle 'a' bit
 fn comp_to_binary(s: &str) -> u16 {
   match s {
     "0" => 0b101010,
@@ -41,7 +41,19 @@ fn comp_to_binary(s: &str) -> u16 {
     "A-D" => 0b000111,
     "D&A" => 0b000000,
     "D|A" => 0b010101,
-    _ => panic!("Unexpected jump: {}"),
+
+    "M" => 0b1110000,
+    "!M" => 0b1110001,
+    "-M" => 0b1110011,
+    "M+1" => 0b1110111,
+    "M-1" => 0b1110010,
+    "D+M" => 0b1000010,
+    "D-M" => 0b1010011,
+    "M-D" => 0b1000111,
+    "D&M" => 0b1000000,
+    "D|M" => 0b1010101,
+
+    _ => panic!("Unexpected jump: {}", s),
   }
 }
 
@@ -73,12 +85,17 @@ fn dest_to_binary(s: Option<&str>) -> u16 {
   }
 }
 
-fn to_binary_string(instruction: Instruction) -> Option<String> {
+fn to_binary_string(
+  instruction: Instruction,
+  on_symbol: &mut FnMut(String) -> Option<String>,
+) -> Option<String> {
   match instruction {
-    Instruction::A { value } => match value.parse::<i32>() {
-      Ok(n) => Some(format!("0{:015b}", n)),
-      _ => None,
-    },
+    Instruction::A { value } => {
+      return match value.parse::<i32>() {
+        Ok(n) => Some(format!("0{:015b}", n)),
+        _ => on_symbol(value),
+      };
+    }
     Instruction::C { dest, comp, jump } => Some(format!(
       "111{:07b}{:03b}{:03b}",
       comp_to_binary(&comp),
@@ -89,10 +106,22 @@ fn to_binary_string(instruction: Instruction) -> Option<String> {
   }
 }
 
-fn translate(input: String) -> String {
-  let instructions: Vec<Instruction> = input
+fn remove_comment(s: &str) -> &str {
+  match s.find("//") {
+    Some(index) => {
+      let (real, _) = s.split_at(index);
+      return real.trim();
+    }
+    None => s.trim(),
+  }
+}
+
+fn parse(input: String) -> Vec<Instruction> {
+  return input
     .lines()
-    .filter_map(|line| {
+    .filter_map(|raw_line| {
+      let line = remove_comment(raw_line);
+
       let mut chars = line.chars();
       let first = chars.next();
       if line.is_empty() {
@@ -103,9 +132,11 @@ fn translate(input: String) -> String {
         return None;
       }
       match line {
-        s if first == Some('@') => Some(Instruction::A {
-          value: s.to_string()[1..].to_string(),
-        }),
+        s if first == Some('@') => {
+          return Some(Instruction::A {
+            value: s.to_string()[1..].to_string(),
+          });
+        }
         s if first == Some('(') => {
           let len = s.len();
           Some(Instruction::L {
@@ -137,13 +168,63 @@ fn translate(input: String) -> String {
         _ => panic!("Unknown command: {}", line),
       }
     }).collect();
+}
 
-  let mut output = String::from("");
+fn build_symbol_table(instructions: &Vec<Instruction>) -> HashMap<String, i32> {
+  let mut symbol_table: HashMap<String, i32> = HashMap::new();
+
+  // page 110
+  symbol_table.insert(String::from("SP"), 0);
+  symbol_table.insert(String::from("LCL"), 1);
+  symbol_table.insert(String::from("ARG"), 2);
+  symbol_table.insert(String::from("THIS"), 3);
+  symbol_table.insert(String::from("THAT"), 3);
+  for n in 0..16 {
+    symbol_table.insert(format!("R{}", n), n);
+  }
+  symbol_table.insert(String::from("SCREEN"), 16384);
+  symbol_table.insert(String::from("KBD"), 24576);
+
+  let mut address = 0;
 
   for instruction in instructions {
-    match to_binary_string(instruction) {
+    match instruction {
+      Instruction::C { .. } => address += 1,
+      Instruction::A { .. } => address += 1,
+      Instruction::L { value } => match symbol_table.get(value) {
+        Some(..) => panic!("Duplicate label: {}", value),
+        None => {
+          symbol_table.insert(value.to_string(), address);
+          ();
+        }
+      },
+    }
+  }
+
+  return symbol_table;
+}
+
+fn translate(input: String) -> String {
+  let instructions: Vec<Instruction> = parse(input);
+  let mut output = String::from("");
+
+  let mut symbol_table = build_symbol_table(&instructions);
+  let mut address: i32 = 16;
+
+  for instruction in instructions {
+    // println!("{:?}", instruction);
+
+    match to_binary_string(instruction, &mut |value| {
+      let address = symbol_table.entry(value).or_insert_with(|| {
+        let result = address;
+        address += 1;
+        return result;
+      });
+
+      return Some(format!("0{:015b}", address));
+    }) {
       Some(s) => output.push_str(&format!("{}\n", s)),
-      _ => println!("..."),
+      _ => (),
     }
   }
 
@@ -152,7 +233,7 @@ fn translate(input: String) -> String {
 
 fn main() {
   let contents =
-    fs::read_to_string("./example/add.asm").expect("Something went wrong reading the file");
+    fs::read_to_string("./example/pong.asm").expect("Something went wrong reading the file");
 
   println!("{}", translate(contents))
 }
@@ -169,6 +250,28 @@ mod tests {
 
     let hack =
       fs::read_to_string("./example/add.hack").expect("Something went wrong reading the file");
+
+    assert_eq!(hack, translate(asm));
+  }
+
+  #[test]
+  fn test_max() {
+    let asm =
+      fs::read_to_string("./example/max.asm").expect("Something went wrong reading the file");
+
+    let hack =
+      fs::read_to_string("./example/max.hack").expect("Something went wrong reading the file");
+
+    assert_eq!(hack, translate(asm));
+  }
+
+  #[test]
+  fn test_rect() {
+    let asm =
+      fs::read_to_string("./example/rect.asm").expect("Something went wrong reading the file");
+
+    let hack =
+      fs::read_to_string("./example/rect.hack").expect("Something went wrong reading the file");
 
     assert_eq!(hack, translate(asm));
   }
