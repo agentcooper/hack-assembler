@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+use std::env;
 use std::fs;
+use std::process;
 
 #[derive(Debug)]
 enum Instruction {
@@ -178,7 +180,7 @@ fn build_symbol_table(instructions: &Vec<Instruction>) -> HashMap<String, i32> {
   symbol_table.insert(String::from("LCL"), 1);
   symbol_table.insert(String::from("ARG"), 2);
   symbol_table.insert(String::from("THIS"), 3);
-  symbol_table.insert(String::from("THAT"), 3);
+  symbol_table.insert(String::from("THAT"), 4);
   for n in 0..16 {
     symbol_table.insert(format!("R{}", n), n);
   }
@@ -212,8 +214,6 @@ fn translate(input: String) -> String {
   let mut address: i32 = 16;
 
   for instruction in instructions {
-    // println!("{:?}", instruction);
-
     match to_binary_string(instruction, &mut |value| {
       let address = symbol_table.entry(value).or_insert_with(|| {
         let result = address;
@@ -232,8 +232,15 @@ fn translate(input: String) -> String {
 }
 
 fn main() {
-  let contents =
-    fs::read_to_string("./example/pong.asm").expect("Something went wrong reading the file");
+  let args: Vec<String> = env::args().collect();
+  if args.len() < 2 {
+    eprintln!("Error: provide a filename");
+    process::exit(1);
+  }
+
+  let filename = &args[1];
+
+  let contents = fs::read_to_string(filename).expect("Something went wrong reading the file");
 
   println!("{}", translate(contents))
 }
@@ -272,6 +279,17 @@ mod tests {
 
     let hack =
       fs::read_to_string("./example/rect.hack").expect("Something went wrong reading the file");
+
+    assert_eq!(hack, translate(asm));
+  }
+
+  #[test]
+  fn test_pong() {
+    let asm =
+      fs::read_to_string("./example/pong.asm").expect("Something went wrong reading the file");
+
+    let hack =
+      fs::read_to_string("./example/pong.hack").expect("Something went wrong reading the file");
 
     assert_eq!(hack, translate(asm));
   }
