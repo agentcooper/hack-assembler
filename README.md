@@ -4,8 +4,8 @@ Assembler for the Hack language from [The Elements of Computing Systems](https:/
 
 Inside `./examples`:
 
-- \*.asm files are copied from `nand2tetris/projects/06`
-- \*.hack files are generated with `nand2tetris/projects/Assembler`
+- `*.asm` files are copied from `nand2tetris/projects/06`
+- `*.hack` files are generated with `nand2tetris/projects/Assembler`
 
 ## Run
 
