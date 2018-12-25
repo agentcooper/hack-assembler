@@ -15,7 +15,7 @@ Inside `./examples`:
 cargo run ./example/add.asm
 ```
 
-## Tests
+## Test
 
 ```
 cargo test
